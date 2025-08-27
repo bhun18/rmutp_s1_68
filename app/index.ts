@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import PrismaClient from "@prisma/client/extension";
+import { PrismaClient } from "@prisma/client/";
 //import { PrismaClient } from "../generated/prisma/client";
 
 const prisma = new PrismaClient();
@@ -13,9 +13,9 @@ app.get("/about", (c) => {
         massage: "Thanusphol Kruthong"
     });
 });
-app.get("/profile", () => {
-    const profile = prisma.profile.findMany();
-    return profile;
-});
+app.get("/profile", async(c) => {
+    const profile = await prisma.profile.findMany();
+    return c.json(profile);
+})
 
 export default app;
