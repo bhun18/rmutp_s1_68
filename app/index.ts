@@ -1,88 +1,72 @@
 import { Hono } from "hono";
 import { PrismaClient } from "@prisma/client";
-// import { PrismaClient } from "../generated/prisma/client";
 import * as bcrypt from "bcrypt";
-// import { Md5 } from "md5-typescript";
-import { encode, decode } from "./service";
+import { encrypted, decrypted } from "./service";  
 
 const prisma = new PrismaClient();
-
 const app = new Hono();
-app.get("/", (c) => c.text("Hello, World!"));
+
+app.get("/", (c) => c.text("Hono!"));
 app.get("/about", (c) => {
-    return c.json({
-        message: "thanusphol kruthong"
-    });
+  return c.json({ message: "thanusphol kruthong" });
 });
-app.get("/profile", async(c) => {
-    //logic
-    const profiles = await prisma.profile.findMany();
-    return c.json(profiles);    
+
+//GET profiles
+app.get("/profile", async (c) => {
+  const profiles = await prisma.profile.findMany();
+
+  const decodedProfiles = profiles.map((p) => ({
+    ...p,
+    mobile: decrypted(p.mobile),
+    cardId: decrypted(p.cardId),
+  }));
+
+  return c.json(decodedProfiles);
 });
+
+//CREATE profile
 app.post("/profile", async (c) => {
-    //logic to create a new profile
-    const body = await c.req.json();
-    // console.log('input of profile ', body);
-    // console.log('body.password(original) ', body.password);
+  const body = await c.req.json();
+  console.log("input of profile", body);
+  console.log("body.password(original)", body.password);
 
-    //encode password
-    const passwordHash = await bcrypt.hash(body.password, 13);
-    // console.log('hash.password(after) ', passwordHash);
-    body.password = passwordHash;
-    // console.log('body.password(replace) ', body);
+  // encode sensitive fields
+  const encMobile = encrypted(body.mobile);
+  const encCardId = encrypted(body.cardId);
+  // ---- ตรวจซ้ำ (ต้อง decode จาก DB มาเช็ค) ----
+  const existingProfiles = await prisma.profile.findMany();
+  const duplicatedFields: string[] = [];
 
-    //encode mobile
-    // body.mobile = Md5.init(body.mobile);
-    body.mobile = encode(body.mobile);
+  for (const p of existingProfiles) {
+    if (decrypted(p.mobile) === body.mobile) duplicatedFields.push("mobile");
+    if (decrypted(p.cardId) === body.cardId) duplicatedFields.push("cardId");
+  }
 
-    //encode cardId
-    // body.cardId = Md5.init(body.cardId);
-    body.cardId = encode(body.cardId);
+  if (duplicatedFields.length > 0) {
+    return c.json(
+      { message: `ข้อมูลซ้ำ: ${duplicatedFields.join(", ")}` },
+      503
+    );
+  }
 
-    //data before save
-    console.log('data before save ', body);
-    // return c.json({
-    //     message: "data before save",
-    //     data: body
-    // });
-    
-    //save to db
-    body.status= false;
-    const result = await prisma.profile.create({
-        data: body
-    })
-    .then(data => { 
-        delete data.password;
-        console.log('create profile completed', data);
-        return data;
-    })
-    .catch(err => {
-        console.log(`create profile failed `, JSON.stringify(err?.message));
-        // switch case error message
-        return "please recheck username, mobile or cardId";
-    });
+  // ---- hash password ----
+  body.password = await bcrypt.hash(body.password, 12); // แนะนำใช้ 12
 
-    //output response
-    return c.json({
-        message: "create profile completed",
-        data: result
-    });
-});
-app.get("/profile/:id", async (c) => {
-    //get some data from db
-    const id = c.req.param('id');
-    console.log('id ', id);
-    const profile = await prisma.profile.findFirstOrThrow({
-        where: {
-            id: id
-        }
-    });
-    delete profile.password;
+  // ---- save to db ----
+  body.mobile = encMobile;
+  body.cardId = encCardId;
+  body.status = false;
 
-    return c.json({
-        message: "get data completed",
-        data: profile
-    }, 200);
+  const result = await prisma.profile.create({
+    data: body,
+  });
+
+
+  c.status(200);
+  return c.json({
+    message: "create profile completed",
+    data: result,
+  });
 });
 
 export default app;

@@ -13,8 +13,8 @@ POST http://localhost:3000/profile
 Content-Type: application/json
 
 {
-  "username": "demo",
-  "password": "1234",
-  "mobile": "0933851531",
-  "cardId": "1233857891234"
+  "username": "thanusphol",
+  "password": "Bhun0988014838zazazazaza!",
+  "mobile": "0988014838",
+  "cardId": "1234764777777"
 }
